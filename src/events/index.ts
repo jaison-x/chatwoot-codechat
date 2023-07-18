@@ -23,6 +23,7 @@ import { IMPORT_MESSAGES_SENT, TOSIGN, CHATWOOT_TOKEN, CHATWOOT_BASE_URL } from 
 import { writeFileSync } from "fs";
 import db from "../db";
 import path from "path";
+import { sendMailInstanceClose } from "../services/mail";
 
 const messages_sent = [];
 
@@ -33,7 +34,11 @@ export const eventChatWoot = async (body: any): Promise<{ message: string }> => 
   const senderName = body?.sender?.name;
   const accountId = body.account.id as number;
 
-  console.log(`🎉 Evento recebido de ${chatId}`);
+  console.log(`🎉 Evento chatwoot: ${body.event} recebido de ${chatId}`);
+  if(body.event.includes('message')) {
+    console.log(body);
+    console.log("\n\n");
+  }
 
   if (chatId === '123456' && body.message_type === 'outgoing') {
     const command = messageReceived.replace("/", "");
@@ -115,9 +120,7 @@ export const eventChatWoot = async (body: any): Promise<{ message: string }> => 
     }
 
     for (const message of body.conversation.messages) {
-
       if (message.attachments && message.attachments.length > 0) {
-
         for (const attachment of message.attachments) {
           console.log(attachment)
           sendAttachment(
@@ -127,7 +130,9 @@ export const eventChatWoot = async (body: any): Promise<{ message: string }> => 
             formatText
           );
         }
-      } else {
+      }
+
+      if (messageReceived && messageReceived != "") {
         sendText(formatText, chatId, body.inbox.name);
       }
     }
@@ -139,7 +144,11 @@ export const eventChatWoot = async (body: any): Promise<{ message: string }> => 
 export const eventCodeChat = async (body: any): Promise<any> => {
   try {
     const instance = body.instance;
-    console.log(`🎉 Evento recebido de ${instance}`);
+    console.log(`\n🎉 Evento whatsapp: ${body.event} recebido de ${instance}`);
+    if(body.event.includes('message')) {
+      console.log(body);
+      console.log("\n\n");
+    }
 
 
     const stmtExist = db.prepare(`SELECT * FROM providers WHERE nameInbox = ?`);
@@ -201,7 +210,9 @@ export const eventCodeChat = async (body: any): Promise<any> => {
 
       const send = await createMessage(accountId, getConversion, bodyMessage, messageType);
 
-      messages_sent.push(send.id); 
+      if (send.id && body.data.key.fromMe) {
+        messages_sent.push(send.id);
+      }
       
       return send;
 
@@ -220,6 +231,10 @@ export const eventCodeChat = async (body: any): Promise<any> => {
       if (body.data.state === "open") {
         const msgConnection = `🚀 Conexão realizada com sucesso!`;
         await createBotMessage(accountId, msgConnection, "incoming", instance);
+      }
+
+      if (body.data.state === "close") {
+        sendMailInstanceClose(body.data.instance, body.data.statusReason);
       }
     }
 
